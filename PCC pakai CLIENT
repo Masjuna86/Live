@@ -1,0 +1,50 @@
+# MikroTik Load Balancing Connection Classifier (LB PCC)
+# RouterOS: v7.xx
+# WAN ISPs: 3
+# Recursive Gateway: off
+# Bandwidth Ratio: on
+# Local Target: In. Interface (CLIENT)
+
+/ip firewall address-list
+add address=192.168.0.0/16 list="LOCAL-IP" comment="Local IPs or Private IPs (RFC1918)"
+add address=172.16.0.0/12 list="LOCAL-IP"
+add address=10.0.0.0/8 list="LOCAL-IP"
+
+/ip firewall nat
+add chain=srcnat out-interface="ether1-WAN1" action=masquerade comment="Nat Masquerade to ISP-1"
+add chain=srcnat out-interface="ether2-WAN2" action=masquerade comment="Nat Masquerade to ISP-2"
+add chain=srcnat out-interface="ether3-WAN3" action=masquerade comment="Nat Masquerade to ISP-3"
+
+/routing table
+add name="to-ISP-1" fib comment="PCC Route to ISP-1"
+add name="to-ISP-2" fib comment="PCC Route to ISP-2"
+add name="to-ISP-3" fib comment="PCC Route to ISP-3"
+
+/ip route
+add check-gateway=ping distance=1 gateway=172.16.20.1  scope="30" target-scope="30" routing-table="to-ISP-1" comment="PCC Routing Mark to ISP-1"
+add check-gateway=ping distance=1 gateway=172.16.30.1  scope="30" target-scope="30" routing-table="to-ISP-2" comment="PCC Routing Mark to ISP-2"
+add check-gateway=ping distance=1 gateway=172.16.40.1  scope="30" target-scope="30" routing-table="to-ISP-3" comment="PCC Routing Mark to ISP-3"
+add check-gateway=ping distance=1 gateway=172.16.20.1 scope="30" target-scope="30" routing-table=main comment="PCC Default Route to ISP-1"
+add check-gateway=ping distance=2 gateway=172.16.30.1 scope="30" target-scope="30" routing-table=main comment="PCC Default Route to ISP-2"
+add check-gateway=ping distance=3 gateway=172.16.40.1 scope="30" target-scope="30" routing-table=main comment="PCC Default Route to ISP-3"
+
+/ip firewall mangle
+add action=accept chain=prerouting dst-address-list="LOCAL-IP" src-address-list="LOCAL-IP" comment="// LOCAL TRAFFIC BYPASS"
+add action=accept chain=postrouting dst-address-list="LOCAL-IP" src-address-list="LOCAL-IP"
+add action=accept chain=forward dst-address-list="LOCAL-IP" src-address-list="LOCAL-IP"
+add action=accept chain=input dst-address-list="LOCAL-IP" src-address-list="LOCAL-IP"
+add action=accept chain=output dst-address-list="LOCAL-IP" src-address-list="LOCAL-IP"
+add action=mark-connection chain=input in-interface="ether1-WAN1" new-connection-mark="ISP-1-conn" passthrough=yes comment="// PCC LOAD BALANCING"
+add action=mark-connection chain=input in-interface="ether2-WAN2" new-connection-mark="ISP-2-conn" passthrough=yes
+add action=mark-connection chain=input in-interface="ether3-WAN3" new-connection-mark="ISP-3-conn" passthrough=yes
+add action=mark-routing chain=output connection-mark="ISP-1-conn" new-routing-mark="to-ISP-1" passthrough=yes
+add action=mark-routing chain=output connection-mark="ISP-2-conn" new-routing-mark="to-ISP-2" passthrough=yes
+add action=mark-routing chain=output connection-mark="ISP-3-conn" new-routing-mark="to-ISP-3" passthrough=yes
+add action=mark-connection chain=prerouting new-connection-mark="ISP-1-conn" passthrough=yes per-connection-classifier=both-addresses-and-ports:5/0 dst-address-type=!local in-interface="CLIENT"
+add action=mark-connection chain=prerouting new-connection-mark="ISP-1-conn" passthrough=yes per-connection-classifier=both-addresses-and-ports:5/1 dst-address-type=!local in-interface="CLIENT"
+add action=mark-connection chain=prerouting new-connection-mark="ISP-2-conn" passthrough=yes per-connection-classifier=both-addresses-and-ports:5/2 dst-address-type=!local in-interface="CLIENT"
+add action=mark-connection chain=prerouting new-connection-mark="ISP-2-conn" passthrough=yes per-connection-classifier=both-addresses-and-ports:5/3 dst-address-type=!local in-interface="CLIENT"
+add action=mark-connection chain=prerouting new-connection-mark="ISP-3-conn" passthrough=yes per-connection-classifier=both-addresses-and-ports:5/4 dst-address-type=!local in-interface="CLIENT"
+add action=mark-routing chain=prerouting connection-mark="ISP-1-conn" new-routing-mark="to-ISP-1" passthrough=yes in-interface="CLIENT"
+add action=mark-routing chain=prerouting connection-mark="ISP-2-conn" new-routing-mark="to-ISP-2" passthrough=yes in-interface="CLIENT"
+add action=mark-routing chain=prerouting connection-mark="ISP-3-conn" new-routing-mark="to-ISP-3" passthrough=yes in-interface="CLIENT"
