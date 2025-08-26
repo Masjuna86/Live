@@ -1,0 +1,40 @@
+/ip firewall address-list
+# Group IP untuk masing-masing WAN
+add list=wan1-clients address=192.168.20.2-192.168.20.100
+add list=wan2-clients address=192.168.20.101-192.168.20.200
+add list=wan3-clients address=192.168.20.201-192.168.20.254
+
+/ip firewall mangle
+# MARK Routing WAN1
+add chain=prerouting src-address-list=wan1-clients action=mark-routing new-routing-mark=to-wan1 passthrough=yes
+# MARK Routing WAN2
+add chain=prerouting src-address-list=wan2-clients action=mark-routing new-routing-mark=to-wan2 passthrough=yes
+# MARK Routing WAN3
+add chain=prerouting src-address-list=wan3-clients action=mark-routing new-routing-mark=to-wan3 passthrough=yes
+
+/ip route
+# ROUTING TABLE untuk WAN1 (failover ke WAN2 lalu WAN3)
+add dst-address=0.0.0.0/0 gateway=172.16.20.1 routing-mark=to-wan1 check-gateway=ping distance=1
+add dst-address=0.0.0.0/0 gateway=172.16.30.1 routing-mark=to-wan1 check-gateway=ping distance=2
+add dst-address=0.0.0.0/0 gateway=172.16.40.1 routing-mark=to-wan1 check-gateway=ping distance=3
+
+# ROUTING TABLE untuk WAN2 (failover ke WAN3 lalu WAN1)
+add dst-address=0.0.0.0/0 gateway=172.16.30.1 routing-mark=to-wan2 check-gateway=ping distance=1
+add dst-address=0.0.0.0/0 gateway=172.16.40.1 routing-mark=to-wan2 check-gateway=ping distance=2
+add dst-address=0.0.0.0/0 gateway=172.16.20.1 routing-mark=to-wan2 check-gateway=ping distance=3
+
+# ROUTING TABLE untuk WAN3 (failover ke WAN1 lalu WAN2)
+add dst-address=0.0.0.0/0 gateway=172.16.40.1 routing-mark=to-wan3 check-gateway=ping distance=1
+add dst-address=0.0.0.0/0 gateway=172.16.20.1 routing-mark=to-wan3 check-gateway=ping distance=2
+add dst-address=0.0.0.0/0 gateway=172.16.30.1 routing-mark=to-wan3 check-gateway=ping distance=3
+
+# Default Route (buat IP lain di luar group → prioritas WAN1, failover ke WAN2, WAN3)
+add dst-address=0.0.0.0/0 gateway=172.16.20.1 check-gateway=ping distance=1
+add dst-address=0.0.0.0/0 gateway=172.16.30.1 check-gateway=ping distance=2
+add dst-address=0.0.0.0/0 gateway=172.16.40.1 check-gateway=ping distance=3
+
+/ip firewall nat
+# NAT untuk masing-masing WAN
+add chain=srcnat out-interface=ether1 action=masquerade
+add chain=srcnat out-interface=ether2 action=masquerade
+add chain=srcnat out-interface=ether3 action=masquerade
