@@ -1,0 +1,8 @@
+:local u $"user"
+:local m $"mac-address"
+/ip hotspot ip-binding
+:if ([:len [/ip hotspot ip-binding find mac-address=$m]] = 0) do={
+    /ip hotspot ip-binding add mac-address=$m type=bypassed comment=$u
+} else={
+    /ip hotspot ip-binding set [find mac-address=$m] comment=$u
+}
